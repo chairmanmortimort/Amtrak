@@ -81,6 +81,7 @@ internal class WikipediaApi {
                 parameter("action", "query")
                 parameter("prop", "extracts")
                 parameter("explaintext", "1")
+                parameter("redirects", "1")
                 parameter("titles", title.trim())
                 parameter("format", "json")
             }
@@ -104,6 +105,7 @@ internal class WikipediaApi {
             url {
                 parameter("action", "query")
                 parameter("prop", "links")
+                parameter("redirects", "1")
                 parameter("titles", title.trim())
                 parameter("format", "json")
                 parameter("pllimit", limit.toString())

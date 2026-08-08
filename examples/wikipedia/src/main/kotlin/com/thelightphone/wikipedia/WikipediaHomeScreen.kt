@@ -1,6 +1,6 @@
 package com.thelightphone.wikipedia
+import android.util.Log
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,9 +10,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.background
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import com.thelightphone.sdk.ui.defaultKeyboardOptions
+import kotlinx.coroutines.flow.MutableStateFlow
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -61,6 +65,8 @@ class WikipediaHomeScreen(sealedActivity: SealedLightActivity) :
                             onSearchClick = viewModel::openSearch,
                             onRandomClick = viewModel::openRandom,
                             onSettingsClick = viewModel::openAbout,
+                            recentArticles = state.recentArticles,
+                            onOpenRecent = viewModel::openArticle,
                         )
                     }
 
@@ -113,10 +119,13 @@ class WikipediaHomeScreen(sealedActivity: SealedLightActivity) :
                             extract = mode.extract,
                             thumbnailUrl = mode.thumbnailUrl,
                             links = mode.links,
+                            leadExtract = mode.leadExtract,
                             isLoading = mode.isLoading,
                             onBack = viewModel::cancelSearch,
                             onOpenSettings = viewModel::openAbout,
                             onOpenLink = viewModel::openLink,
+                            onRandom = viewModel::openRandom,
+                            onLongPressWord = viewModel::defineTerm,
                         )
                     }
 
@@ -137,13 +146,15 @@ class WikipediaHomeScreen(sealedActivity: SealedLightActivity) :
 }
 
 /**
- * Home screen — presents Search and Random options.
+ * Home screen — presents Search, Random, and recently viewed articles.
  */
 @Composable
 private fun HomeContent(
     onSearchClick: () -> Unit,
     onRandomClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    recentArticles: List<String> = emptyList(),
+    onOpenRecent: (String) -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -151,7 +162,6 @@ private fun HomeContent(
             .padding(3f.gridUnitsAsDp()),
     ) {
         LightTopBar(
-            center = LightTopBarCenter.Text("Wikipedia"),
             rightButton = LightBarButton.LightIcon(
                 icon = LightIcons.SETTINGS,
                 onClick = onSettingsClick,
@@ -160,12 +170,26 @@ private fun HomeContent(
             modifier = Modifier.padding(bottom = 0.25f.gridUnitsAsDp()),
         )
 
-        LightText(
-            text = "Search articles or discover random facts.",
-            variant = LightTextVariant.Detail,
-            lighten = true,
-            modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
-        )
+        // Large wordmark
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 2f.gridUnitsAsDp()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            LightText(
+                text = "Wikipedia",
+                variant = LightTextVariant.Heading,
+                align = TextAlign.Center,
+            )
+            LightText(
+                text = "Search articles or discover random facts.",
+                variant = LightTextVariant.Detail,
+                lighten = true,
+                align = TextAlign.Center,
+                modifier = Modifier.padding(top = 0.5f.gridUnitsAsDp()),
+            )
+        }
 
         Column(
             modifier = Modifier
@@ -185,6 +209,23 @@ private fun HomeContent(
                 icon = LightIcons.LOOP,
                 onClick = onRandomClick,
             )
+            if (recentArticles.isNotEmpty()) {
+                LightText(
+                    text = "Recent",
+                    variant = LightTextVariant.Subheading,
+                    modifier = Modifier.padding(top = 2f.gridUnitsAsDp(), bottom = 0.5f.gridUnitsAsDp()),
+                )
+                recentArticles.forEach { title ->
+                    LightText(
+                        text = title,
+                        variant = LightTextVariant.Subheading,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .lightClickable(onClick = { onOpenRecent(title) })
+                            .padding(vertical = 1.5f.gridUnitsAsDp()),
+                    )
+                }
+            }
         }
     }
 }
@@ -232,5 +273,6 @@ fun SearchInputContent(
         submitLabel = "SEARCH",
         submitIcon = LightIcons.SEARCH,
         editorKey = editorKey,
+        keyboardOptionsFlow = remember { MutableStateFlow(defaultKeyboardOptions()) },
     )
 }

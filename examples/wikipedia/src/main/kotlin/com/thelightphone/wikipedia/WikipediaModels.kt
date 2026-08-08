@@ -27,6 +27,7 @@ data class WikiSummaryResponse(
     @SerialName("originalimage") val originalImage: WikiThumbnail? = null,
     @SerialName("content_urls") val contentUrls: WikiContentUrls? = null,
     @SerialName("lang") val lang: String = "en",
+    @SerialName("pronunciation") val pronunciation: WikiPronunciation? = null,
 ) {
     val descriptionText: String get() = description ?: ""
     val thumbnailUrl: String? get() = thumbnail?.source
@@ -38,6 +39,12 @@ data class WikiThumbnail(
     val source: String = "",
     val width: Int = 0,
     val height: Int = 0,
+)
+
+@Serializable
+data class WikiPronunciation(
+    val value: String = "",
+    val language: String = "",
 )
 
 @Serializable

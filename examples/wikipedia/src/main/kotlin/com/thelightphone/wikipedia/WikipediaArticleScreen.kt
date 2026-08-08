@@ -1,17 +1,28 @@
 package com.thelightphone.wikipedia
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -25,6 +36,68 @@ import com.thelightphone.sdk.ui.LightTopBarCenter
 import com.thelightphone.sdk.ui.LightThemeTokens
 import com.thelightphone.sdk.ui.gridUnitsAsDp
 import com.thelightphone.sdk.ui.lightClickable
+import kotlinx.coroutines.launch
+
+/**
+ * A single paragraph line within the article body. [isLink] marks lines that
+ * exactly match a known related-article title and should render underlined and
+ * tappable.
+ */
+private data class ParagraphLine(val text: String, val isLink: Boolean)
+
+/** A section block: [header] is null for the intro, otherwise the == Section == title. */
+private data class ArticleBlock(val header: String?, val paragraphs: List<ParagraphLine>)
+
+/**
+ * Splits a MediaWiki plain-text extract into an intro block (the text before the
+ * first section header) and a list of section blocks. Terminal sections
+ * (References, Sources, etc.) are dropped entirely, as they are not useful on a
+ * small monochrome display.
+ */
+private fun parseArticle(
+    extract: String,
+    linkSet: Set<String>,
+): Pair<List<ParagraphLine>, List<ArticleBlock>> {
+    val TERMINAL = setOf("references", "sources", "further reading", "external links", "see also", "footnotes")
+    val sectionRegex = Regex("^(=+)\\s*(.+?)\\s*=+$")
+
+    val intro = mutableListOf<ParagraphLine>()
+    val sections = mutableListOf<ArticleBlock>()
+    var currentHeader: String? = null
+    var currentParas = mutableListOf<ParagraphLine>()
+    var inTerminal = false
+    var startedSections = false
+
+    for (raw in extract.lines()) {
+        val line = raw.trim()
+        if (line.isEmpty()) continue
+
+        val m = sectionRegex.find(line)
+        if (m != null) {
+            val headerText = m.groupValues[2].trim()
+            if (headerText.lowercase() in TERMINAL) {
+                inTerminal = true
+                continue
+            }
+            inTerminal = false
+            if (startedSections) {
+                sections.add(ArticleBlock(currentHeader, currentParas.toList()))
+            }
+            currentHeader = headerText
+            currentParas = mutableListOf()
+            startedSections = true
+            continue
+        }
+
+        if (inTerminal) continue
+        val para = ParagraphLine(line, linkSet.contains(line))
+        if (startedSections) currentParas.add(para) else intro.add(para)
+    }
+    if (startedSections) {
+        sections.add(ArticleBlock(currentHeader, currentParas.toList()))
+    }
+    return intro.toList() to sections.toList()
+}
 
 @Composable
 fun ArticleContent(
@@ -33,12 +106,27 @@ fun ArticleContent(
     extract: String,
     thumbnailUrl: String?,
     links: List<String>,
+    leadExtract: String? = null,
     isLoading: Boolean,
     onBack: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenLink: (String) -> Unit,
+    onRandom: () -> Unit = {},
+    onLongPressWord: (String) -> Unit = {},
 ) {
-    val scrollState = rememberScrollState()
+    val listState: LazyListState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val linkSet = links.toSet()
+
+    val (intro, sections) = remember(extract, links) {
+        if (extract.isBlank()) {
+            emptyList<ParagraphLine>() to emptyList<ArticleBlock>()
+        } else {
+            parseArticle(extract, linkSet)
+        }
+    }
+
+    val totalItems = 1 + sections.size + if (links.isNotEmpty()) 1 else 0
 
     Column(modifier = Modifier.fillMaxSize()) {
         LightTopBar(
@@ -71,43 +159,95 @@ fun ArticleContent(
                 )
             }
         } else {
-            Column(
+            LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .padding(horizontal = 1f.gridUnitsAsDp())
-                    .padding(top = 0.5f.gridUnitsAsDp())
-                    .verticalScroll(scrollState),
+                    .padding(top = 0.5f.gridUnitsAsDp()),
             ) {
-                Column {
-                    // Article title (large, for readability on monochrome display)
-                    LightText(
-                        text = title,
-                        variant = LightTextVariant.Heading,
-                        align = TextAlign.Center,
-                        modifier = Modifier.padding(top = 0.5f.gridUnitsAsDp()),
-                    )
-
-                    // Description line (if available)
-                    description?.let { desc ->
-                        if (desc.isNotBlank()) {
+                // ----- Intro block (title + description + lead paragraphs) -----
+                item {
+                    Column {
+                        LightText(
+                            text = title,
+                            variant = LightTextVariant.Heading,
+                            align = TextAlign.Center,
+                            modifier = Modifier.padding(top = 0.5f.gridUnitsAsDp()),
+                        )
+                        description?.let { desc ->
+                            if (desc.isNotBlank()) {
+                                LightText(
+                                    text = desc,
+                                    variant = LightTextVariant.Subheading,
+                                    modifier = Modifier.padding(bottom = 1f.gridUnitsAsDp()),
+                                )
+                            }
+                        }
+                        if (intro.isEmpty()) {
                             LightText(
-                                text = desc,
-                                variant = LightTextVariant.Subheading,
-                                modifier = Modifier.padding(bottom = 1f.gridUnitsAsDp()),
+                                text = "No article text available.",
+                                variant = LightTextVariant.Copy,
+                                lighten = true,
                             )
+                        } else {
+                            intro.forEach { line ->
+                                ParagraphView(line, onOpenLink, onLongPressWord)
+                            }
                         }
                     }
+                }
 
-                    // Article content — parse the plain text extract into sections
-                    ArticleBody(
-                        extract = extract,
-                        links = links,
-                        onOpenLink = onOpenLink,
-                    )
+                // ----- Lead summary card (description + quick summary) -----
+                if (description != null || leadExtract != null) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 0.75f.gridUnitsAsDp()),
+                        ) {
+                            description?.let { desc ->
+                                if (desc.isNotBlank()) {
+                                    LightText(
+                                        text = desc,
+                                        variant = LightTextVariant.Subheading,
+                                        modifier = Modifier.padding(bottom = 0.5f.gridUnitsAsDp()),
+                                    )
+                                }
+                            }
+                            leadExtract?.let { lead ->
+                                LightText(
+                                    text = lead,
+                                    variant = LightTextVariant.Copy,
+                                    modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp()),
+                                )
+                            }
+                        }
+                    }
+                }
 
-                    // Links section
-                    if (links.isNotEmpty()) {
+                // ----- Section blocks -----
+                items(sections) { block ->
+                    Column(modifier = Modifier.padding(top = 1f.gridUnitsAsDp())) {
+                        block.header?.let { h ->
+                            LightText(
+                                text = h,
+                                variant = LightTextVariant.Heading,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 0.75f.gridUnitsAsDp()),
+                            )
+                        }
+                        block.paragraphs.forEach { line ->
+                            ParagraphView(line, onOpenLink, onLongPressWord)
+                        }
+                    }
+                }
+
+                // ----- Related Articles block -----
+                if (links.isNotEmpty()) {
+                    item {
                         Column(modifier = Modifier.padding(top = 1.5f.gridUnitsAsDp())) {
                             LightText(
                                 text = "Related Articles",
@@ -147,94 +287,90 @@ fun ArticleContent(
                     onClick = onBack,
                     contentDescription = "Back",
                 ),
+                LightBarButton.LightIcon(
+                    icon = LightIcons.LOOP,
+                    onClick = onRandom,
+                    contentDescription = "Random article",
+                ),
+                LightBarButton.LightIcon(
+                    icon = LightIcons.FAST_FORWARD,
+                    onClick = {
+                        val next = (listState.firstVisibleItemIndex + 1)
+                            .coerceAtMost(totalItems - 1)
+                        scope.launch { listState.animateScrollToItem(next) }
+                    },
+                    contentDescription = "Skip to next section",
+                ),
             ),
         )
     }
 }
 
 /**
- * Renders Wikipedia plain-text extract, preserving section structure.
- *
- * The MediaWiki Action API with explaintext=1 produces text like:
- *   Intro paragraph text.
- *   == Section ==
- *   Paragraph under section.
- *   === Subsection ===
- *   More text.
- *
- * Section headers (==, ===) are bolded for visual hierarchy.
- * Additionally, any line that exactly matches a known article link title
- * (from the links list) is rendered with an underline in secondary color
- * and made tappable via lightClickable, enabling in-article hyperlinks.
+ * Resolves the word surrounding a character offset in [text].
+ * Used so a long-press targets the specific word, not the whole line.
  */
+private fun wordAtOffset(text: String, offset: Int): String {
+    if (text.isEmpty()) return text
+    val o = offset.coerceIn(0, text.length - 1)
+    var s = o
+    while (s > 0 && text[s - 1].isLetterOrDigit()) s--
+    var e = o
+    while (e < text.length && text[e].isLetterOrDigit()) e++
+    return text.substring(s, e).trim()
+}
+
 @Composable
-private fun ArticleBody(
-    extract: String,
-    links: List<String>,
+private fun ParagraphView(
+    line: ParagraphLine,
     onOpenLink: (String) -> Unit,
+    onLongPressWord: (String) -> Unit = {},
 ) {
-    if (extract.isBlank()) {
-        LightText(
-            text = "No article text available.",
-            variant = LightTextVariant.Copy,
-            lighten = true,
-        )
-        return
+    // Capture text layout so a long-press can resolve the specific word.
+    var layoutResult by remember(line.text) { mutableStateOf<TextLayoutResult?>(null) }
+    val resolveWord: (Offset) -> Unit = { pos ->
+        val off = layoutResult?.getOffsetForPosition(pos) ?: -1
+        val word = if (off >= 0) wordAtOffset(line.text, off) else ""
+        if (word.isNotBlank()) onLongPressWord(word) else onLongPressWord(line.text)
     }
+    val pressModifier = Modifier
+        .fillMaxWidth()
+        .pointerInput(line.text) { detectTapGestures(onLongPress = resolveWord) }
 
-    val linkSet = links.toSet()
-    val lines = extract.lines()
-
-    Column {
-        lines.forEach { rawLine ->
-            val line = rawLine.trim()
-            if (line.isEmpty()) {
-                Spacer(modifier = Modifier.height(0.5f.gridUnitsAsDp()))
-                return@forEach
-            }
-
-            // Detect section headers (e.g. "== History ==" / === Subsection ===)
-            val sectionMatch = Regex("^(=+)\\s*(.+?)\\s*=+$").find(line)
-            if (sectionMatch != null) {
-                val headerText = sectionMatch.groupValues[2].trim()
-                // Stop rendering at terminal sections — these are not useful on a small
-                // monochrome display: References, Sources, Further reading, External links
-                val terminalSections = setOf(
-                    "References", "Sources", "Further reading",
-                    "External links", "See also", "Footnotes"
-                )
-                if (headerText.lowercase() in terminalSections.map { it.lowercase() }) {
-                    return@forEach
-                }
-                LightText(
-                    text = headerText,
-                    variant = LightTextVariant.Heading,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 1f.gridUnitsAsDp(), bottom = 0.75f.gridUnitsAsDp()),
-                )
-                return@forEach
-            }
-
-            // Check if this line is a known article link — make it tappable + underlined
-            if (linkSet.contains(line)) {
-                LightText(
-                    text = line,
-                    variant = LightTextVariant.Paragraph,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .lightClickable(onClick = { onOpenLink(line) })
-                        .padding(vertical = 0.5f.gridUnitsAsDp()),
-                    color = LightThemeTokens.colors.contentSecondary,
-                    underline = true,
-                )
-            } else {
-                LightText(
-                    text = line,
-                    variant = LightTextVariant.Paragraph,
-                    modifier = Modifier.padding(vertical = 0.25f.gridUnitsAsDp()),
-                )
-            }
+    if (line.isLink) {
+        Box(modifier = pressModifier) {
+            LightText(
+                text = line.text,
+                variant = LightTextVariant.Paragraph,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .lightClickable(onClick = { onOpenLink(line.text) })
+                    .padding(vertical = 0.5f.gridUnitsAsDp()),
+                color = LightThemeTokens.colors.contentSecondary,
+                underline = true,
+            )
+            BasicText(
+                text = line.text,
+                onTextLayout = { result -> layoutResult = result },
+                color = { Color.Transparent },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 0.5f.gridUnitsAsDp()),
+            )
+        }
+    } else {
+        Box(modifier = pressModifier) {
+            LightText(
+                text = line.text,
+                variant = LightTextVariant.Paragraph,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 0.25f.gridUnitsAsDp()),
+            )
+            BasicText(
+                text = line.text,
+                onTextLayout = { result -> layoutResult = result },
+                color = { Color.Transparent },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 0.25f.gridUnitsAsDp()),
+            )
         }
     }
 }
@@ -287,14 +423,4 @@ fun AboutContent(onBack: () -> Unit) {
             ),
         )
     }
-}
-
-@Composable
-private fun Spacer(modifier: Modifier) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(0.5f.gridUnitsAsDp())
-            .background(com.thelightphone.sdk.ui.LightThemeTokens.colors.background),
-    )
 }

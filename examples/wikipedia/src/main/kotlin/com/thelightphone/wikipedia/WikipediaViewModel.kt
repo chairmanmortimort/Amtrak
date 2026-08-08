@@ -1,7 +1,9 @@
 package com.thelightphone.wikipedia
+import android.util.Log
 
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.lifecycle.viewModelScope
 import com.thelightphone.sdk.LightViewModel
 import com.thelightphone.sdk.SimpleLightScreen
@@ -40,6 +42,7 @@ sealed class WikipediaScreenMode {
         val extract: String = "",
         val thumbnailUrl: String? = null,
         val links: List<String> = emptyList(),
+        val leadExtract: String? = null,
         val isLoading: Boolean = false,
     ) : WikipediaScreenMode()
 
@@ -50,6 +53,7 @@ sealed class WikipediaScreenMode {
 data class WikipediaUiState(
     val mode: WikipediaScreenMode = WikipediaScreenMode.Home,
     val errorModal: String? = null,
+    val recentArticles: List<String> = emptyList(),
 )
 
 private const val NETWORK_ERROR_MESSAGE =
@@ -60,6 +64,7 @@ private val MIN_LOADING_DISPLAY = 1.seconds
 internal object WikipediaPreferences {
     val LAST_SEARCH_QUERY = stringPreferencesKey("wiki_last_search_query")
     val LAST_ARTICLE_TITLE = stringPreferencesKey("wiki_last_article_title")
+    val RECENT_ARTICLES = stringSetPreferencesKey("wiki_recent_articles")
 }
 
 class WikipediaViewModel(
@@ -70,6 +75,9 @@ class WikipediaViewModel(
 
     private val _uiState = MutableStateFlow(WikipediaUiState())
     val uiState: StateFlow<WikipediaUiState> = _uiState.asStateFlow()
+
+    /** In-memory source of truth for recently viewed articles (DataStore is just persistence). */
+    private val _recentArticles = MutableStateFlow<List<String>>(emptyList())
 
     private val apiExceptionHandler = CoroutineExceptionHandler { _, throwable ->
         if (throwable is CancellationException) return@CoroutineExceptionHandler
@@ -83,14 +91,23 @@ class WikipediaViewModel(
         super.onScreenShow(screen)
         // Restore last search query or article title from DataStore on first show
         if (_uiState.value.mode is WikipediaScreenMode.Home && _uiState.value.errorModal == null) {
-            viewModelScope.launch(Dispatchers.IO + apiExceptionHandler) {
-                val prefs = dataStore.data.first()
-                // Restore is passive — we don't auto-navigate, just persist for future use
-            }
+            seedRecentsOnce()
         }
     }
 
     // === Home screen actions ===
+
+    /** Seed the in-memory recents from DataStore once (called on first home show). */
+    private fun seedRecentsOnce() {
+        if (_recentArticles.value.isNotEmpty()) return
+        viewModelScope.launch(Dispatchers.IO + apiExceptionHandler) {
+            // Filter out blank/garbage titles that older builds may have persisted.
+            val recents = (dataStore.data.first()[WikipediaPreferences.RECENT_ARTICLES]?.toList()
+                ?: emptyList()).filter { it.isNotBlank() }
+            _recentArticles.value = recents
+            _uiState.value = _uiState.value.copy(recentArticles = recents)
+        }
+    }
 
     fun openSearch() {
         _uiState.value = _uiState.value.copy(
@@ -162,6 +179,7 @@ class WikipediaViewModel(
         _uiState.value = _uiState.value.copy(
             mode = WikipediaScreenMode.Home,
             errorModal = null,
+            recentArticles = _recentArticles.value,
         )
     }
 
@@ -183,10 +201,18 @@ class WikipediaViewModel(
                 ),
             )
 
-            // Fetch summary (description + thumbnail) and extract (full text) and links
+            // Fetch summary (description + thumbnail + lead extract + pronunciation) and extract (full text) and links
             val summary = api.fetchSummary(title).getOrNull()
             val extract = api.fetchExtract(title).getOrElse { "" }
             val links = api.fetchLinks(title).getOrElse { emptyList() }
+
+            // Update in-memory recents immediately (source of truth for display).
+            // Filter blanks so stale/garbage persisted titles never reappear.
+            val updatedRecents = buildList {
+                add(title)
+                addAll(_recentArticles.value.filter { it != title && it.isNotBlank() })
+            }.filter { it.isNotBlank() }.take(5)
+            _recentArticles.value = updatedRecents
 
             setState(
                 WikipediaScreenMode.Article(
@@ -195,17 +221,24 @@ class WikipediaViewModel(
                     extract = extract,
                     thumbnailUrl = summary?.thumbnailUrl,
                     links = links,
+                    leadExtract = summary?.extract?.takeIf { it.isNotBlank() },
                     isLoading = false,
                 ),
             )
+            _uiState.value = _uiState.value.copy(recentArticles = updatedRecents)
 
             // Enforce minimum loading display
             val remaining = MIN_LOADING_DISPLAY - (Clock.System.now() - loadStart)
             if (remaining.isPositive()) delay(remaining)
 
-            // Persist last article title to DataStore
+            // Persist last article title + recent articles to DataStore
             dataStore.edit { prefs ->
                 prefs[WikipediaPreferences.LAST_ARTICLE_TITLE] = title
+                val cur = ((prefs[WikipediaPreferences.RECENT_ARTICLES]?.toMutableList()
+                    ?: mutableListOf()).filter { it.isNotBlank() }).toMutableList()
+                cur.remove(title)
+                cur.add(0, title)
+                prefs[WikipediaPreferences.RECENT_ARTICLES] = cur.filter { it.isNotBlank() }.take(5).toSet()
             }
         }
     }
@@ -220,8 +253,18 @@ class WikipediaViewModel(
         _uiState.value = _uiState.value.copy(mode = WikipediaScreenMode.About)
     }
 
+    /** Long-press a word/phrase in an article to look it up (define / disambiguate). */
+    fun defineTerm(term: String) {
+        val t = term.toString().trim()
+        if (t.isEmpty()) return
+        submitSearch(t)
+    }
+
     fun closeAbout() {
-        _uiState.value = _uiState.value.copy(mode = WikipediaScreenMode.Home)
+        _uiState.value = _uiState.value.copy(
+            mode = WikipediaScreenMode.Home,
+            recentArticles = _recentArticles.value,
+        )
     }
 
     // === Error handling ===
