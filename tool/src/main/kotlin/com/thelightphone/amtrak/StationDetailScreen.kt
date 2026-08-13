@@ -1,7 +1,5 @@
 package com.thelightphone.amtrak
 
-import com.thelightphone.amtrak.AmtrakRepository
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -145,8 +143,13 @@ class StationDetailScreen(
                                                 .padding(vertical = 0.5f.gridUnitsAsDp()),
                                         ) {
                                             LightText(
-                                                text = "${train.displayRoute} #${train.trainNum}",
+                                                text = train.displayRoute,
                                                 variant = LightTextVariant.Copy,
+                                            )
+                                            LightText(
+                                                text = " " + train.trainNumber,
+                                                variant = LightTextVariant.Detail,
+                                                lighten = true,
                                             )
                                             val arr = viewModel.formatArrival(train)
                                             if (arr.isNotEmpty()) {

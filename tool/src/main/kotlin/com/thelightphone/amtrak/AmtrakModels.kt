@@ -1,5 +1,6 @@
 package com.thelightphone.amtrak
 
+import androidx.compose.runtime.Composable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlin.time.Instant
@@ -143,7 +144,7 @@ data class StationTrain(
     val actualArrival: Instant?,
     val scheduledDeparture: Instant?,
     val estimatedDeparture: Instant?,
-    val actualDeparture: Instant?,
+    val actualDeparture: Instant? = null,
     val status: String,
 ) {
     val trainNumber: String get() = trainNum.toString()

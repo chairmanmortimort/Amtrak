@@ -141,6 +141,21 @@ internal class WikipediaApi {
         randomResponse.query?.random?.firstOrNull()?.title ?: ""
     }
 
+    /**
+     * Fetch "On this day" historical events for the current date.
+     * Uses the REST API /onthisday/events endpoint.
+     * Returns events for today (month/day), e.g. "On this day, August 10"
+     */
+    suspend fun fetchOnThisDay(month: Int, day: Int): Result<WikiOnThisDayResponse> = runCatching {
+        val response = client.get("$BASE_REST/onthisday/events/$month/$day") {
+            timeout {
+                requestTimeoutMillis = 15_000L
+                connectTimeoutMillis = 10_000L
+            }
+        }
+        response.body()
+    }
+
     fun close() {
         client.close()
     }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import com.thelightphone.sdk.InitialScreen
@@ -55,6 +56,11 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                             is AmtrakViewModel.HomeState.Stations -> "Stations"
                             else -> "Trains"
                         },
+                    ),
+                    rightButton = LightBarButton.LightIcon(
+                        icon = LightIcons.SETTINGS,
+                        onClick = { navigateTo(::SettingsScreen) },
+                        contentDescription = "Settings",
                     ),
                     modifier = Modifier.padding(bottom = 0.25f.gridUnitsAsDp()),
                 )
@@ -205,6 +211,11 @@ private fun TrainRow(train: TrainDisplay, onClick: () -> Unit) {
         LightText(
             text = train.displayRoute,
             variant = LightTextVariant.Copy,
+        )
+        LightText(
+            text = " " + train.trainNumber,
+            variant = LightTextVariant.Detail,
+            lighten = true,
         )
         LightText(
             text = "${train.origin} → ${train.destination}",

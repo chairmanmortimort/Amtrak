@@ -6,19 +6,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.height
 import androidx.compose.ui.unit.dp
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.SealedLightActivity
@@ -109,7 +110,7 @@ class TrainDetailScreen(
                                     align = TextAlign.Center,
                                 )
                                 LightText(
-                                    text = "Train ${train.trainNumber}",
+                                    text = train.trainNumber,
                                     variant = LightTextVariant.Detail,
                                     lighten = true,
                                     align = TextAlign.Center,
@@ -208,6 +209,8 @@ private fun StopRow(
     onClick: () -> Unit,
 ) {
     val colors = LightThemeTokens.colors
+    val dotColor = if (currentStopIndex < 0 || index <= currentStopIndex) colors.content else colors.content.copy(alpha = 0.4f)
+    val connectorColor = if (drawConnector) colors.content else colors.content.copy(alpha = 0.4f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -251,7 +254,7 @@ private fun StopRow(
             Box(
                 modifier = Modifier
                     .size(0.6f.gridUnitsAsDp())
-                    .background(if (currentStopIndex < 0 || index <= currentStopIndex) colors.content else colors.content.copy(alpha = 0.4f)),
+                    .background(dotColor),
             )
             if (drawConnector) {
                 Spacer(modifier = Modifier.height(0.5f.gridUnitsAsDp()))
@@ -259,7 +262,7 @@ private fun StopRow(
                     modifier = Modifier
                         .width(0.15f.gridUnitsAsDp())
                         .height(1.5f.gridUnitsAsDp())
-                        .background(colors.content),
+                        .background(connectorColor),
                 )
             }
         }

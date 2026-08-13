@@ -1,10 +1,13 @@
 package com.thelightphone.amtrak
 
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.lifecycle.viewModelScope
 import com.thelightphone.sdk.LightViewModel
 import com.thelightphone.sdk.SimpleLightScreen
+import com.thelightphone.sdk.ui.LightHapticFeedback
+import com.thelightphone.sdk.ui.LightThemeController
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +31,8 @@ internal object AmtrakPreferences {
     val STATIONS_JSON = stringPreferencesKey("amtrak_stations_json")
     val STATION_KEYS_JSON = stringPreferencesKey("amtrak_station_keys_json")
     val LAST_FETCH = stringPreferencesKey("amtrak_last_fetch")
+    val HAPTICS_ENABLED = booleanPreferencesKey("amtrak_haptics_enabled")
+    val COLOR_INVERTED = booleanPreferencesKey("amtrak_color_inverted")
 }
 
 private val JSON = Json { ignoreUnknownKeys = true }
@@ -60,6 +65,9 @@ class AmtrakViewModel(
     private val _errorModal = MutableStateFlow<String?>(null)
     val errorModal: StateFlow<String?> = _errorModal.asStateFlow()
 
+    private val _settingsState = MutableStateFlow(SettingsState())
+    val settingsState: StateFlow<SettingsState> = _settingsState.asStateFlow()
+
     private val _lastTrains = mutableListOf<TrainDisplay>()
     private val _lastStations = mutableMapOf<String, Station>()
 
@@ -77,6 +85,7 @@ class AmtrakViewModel(
     }
 
     init {
+        loadSettings()
         loadFromCacheOrFetch()
     }
 
@@ -94,6 +103,51 @@ class AmtrakViewModel(
 
     fun dismissError() {
         _errorModal.value = null
+    }
+
+    private fun loadSettings() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val prefs = dataStore.data.first()
+            val hapticsEnabled = prefs[AmtrakPreferences.HAPTICS_ENABLED] ?: true
+            val colorInverted = prefs[AmtrakPreferences.COLOR_INVERTED] ?: false
+            withContext(Dispatchers.Main) {
+                _settingsState.value = SettingsState(
+                    hapticsEnabled = hapticsEnabled,
+                    colorInverted = colorInverted,
+                )
+            }
+            // Apply color inversion immediately
+            applyColorInversion(colorInverted)
+        }
+    }
+
+    fun toggleHaptics() {
+        val next = !_settingsState.value.hapticsEnabled
+        _settingsState.value = _settingsState.value.copy(hapticsEnabled = next)
+        viewModelScope.launch(Dispatchers.IO) {
+            dataStore.edit { prefs ->
+                prefs[AmtrakPreferences.HAPTICS_ENABLED] = next
+            }
+        }
+    }
+
+    fun toggleColorInverted() {
+        val next = !_settingsState.value.colorInverted
+        _settingsState.value = _settingsState.value.copy(colorInverted = next)
+        applyColorInversion(next)
+        viewModelScope.launch(Dispatchers.IO) {
+            dataStore.edit { prefs ->
+                prefs[AmtrakPreferences.COLOR_INVERTED] = next
+            }
+        }
+    }
+
+    private fun applyColorInversion(inverted: Boolean) {
+        if (inverted) {
+            LightThemeController.setLightTheme()
+        } else {
+            LightThemeController.setDarkTheme()
+        }
     }
 
     private fun loadFromCacheOrFetch() {
@@ -561,4 +615,9 @@ class AmtrakViewModel(
             val stations: List<Station>,
         ) : SearchState()
     }
+
+    data class SettingsState(
+        val hapticsEnabled: Boolean = true,
+        val colorInverted: Boolean = false,
+    )
 }
