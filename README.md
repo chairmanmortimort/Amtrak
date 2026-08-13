@@ -62,9 +62,24 @@ cd amtrak-tool
 - **Train detail**: Tap any train to see heading, speed, last updated time, and stop list
 - **Station detail**: Tap any station to see upcoming trains with arrival/departure times
 
-## API
+Uses the free community API at `https://api.amtraker.com/v2` — no API key required.
 
-Uses the free community API at `https://api.amtraker.com/v1` — no API key required.
+## Screenshots
+
+### Trains List
+![Trains List](screenshots/01-trains-list.png)
+
+### Stations List
+![Stations List](screenshots/02-stations-list.png)
+
+### Train Detail
+![Train Detail](screenshots/03-train-detail.png)
+
+### Station Detail
+![Station Detail](screenshots/04-station-detail.png)
+
+### Settings
+![Settings](screenshots/05-settings.png)
 
 ## About
 
