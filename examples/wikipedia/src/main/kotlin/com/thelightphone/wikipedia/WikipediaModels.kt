@@ -171,6 +171,32 @@ data class WikiLink(
     val wildcard: String? = null,
 )
 
+// === REST API: On This Day ===
+// https://en.wikipedia.org/api/rest_v1/onthisday/events/{month}/{day}
+// Returns historical events for a specific date.
+
+@Serializable
+data class WikiOnThisDayResponse(
+    val events: List<WikiOnThisDayEvent> = emptyList(),
+    val selected: List<WikiOnThisDayEvent> = emptyList(),
+)
+
+@Serializable
+data class WikiOnThisDayEvent(
+    val text: String = "",
+    val pages: List<WikiOnThisDayPage> = emptyList(),
+    val year: Int = 0,
+)
+
+@Serializable
+data class WikiOnThisDayPage(
+    val title: String = "",
+    @SerialName("pageid") val pageId: Int = 0,
+    val type: String = "",
+    @SerialName("extract") val extract: String? = null,
+    val thumbnail: WikiThumbnail? = null,
+)
+
 // === Domain model ===
 // A combined representation of a Wikipedia article for display on LP3.
 

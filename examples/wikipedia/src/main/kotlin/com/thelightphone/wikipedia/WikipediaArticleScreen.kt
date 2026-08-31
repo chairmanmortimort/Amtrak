@@ -20,7 +20,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -36,24 +35,14 @@ import com.thelightphone.sdk.ui.LightTopBarCenter
 import com.thelightphone.sdk.ui.LightThemeTokens
 import com.thelightphone.sdk.ui.gridUnitsAsDp
 import com.thelightphone.sdk.ui.lightClickable
-import kotlinx.coroutines.launch
 
-/**
- * A single paragraph line within the article body. [isLink] marks lines that
- * exactly match a known related-article title and should render underlined and
- * tappable.
- */
+/** A single paragraph line within the article body. [isLink] marks lines that exactly match a known related-article title and should render underlined and tappable. */
 private data class ParagraphLine(val text: String, val isLink: Boolean)
 
 /** A section block: [header] is null for the intro, otherwise the == Section == title. */
 private data class ArticleBlock(val header: String?, val paragraphs: List<ParagraphLine>)
 
-/**
- * Splits a MediaWiki plain-text extract into an intro block (the text before the
- * first section header) and a list of section blocks. Terminal sections
- * (References, Sources, etc.) are dropped entirely, as they are not useful on a
- * small monochrome display.
- */
+/** Splits a MediaWiki plain-text extract into an intro block (the text before the first section header) and a list of section blocks. Terminal sections (References, Sources, etc.) are dropped entirely, as they are not useful on a small monochrome display. */
 private fun parseArticle(
     extract: String,
     linkSet: Set<String>,
@@ -112,10 +101,10 @@ fun ArticleContent(
     onOpenSettings: () -> Unit,
     onOpenLink: (String) -> Unit,
     onRandom: () -> Unit = {},
+    showRandomArticle: Boolean = true,
     onLongPressWord: (String) -> Unit = {},
 ) {
     val listState: LazyListState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
     val linkSet = links.toSet()
 
     val (intro, sections) = remember(extract, links) {
@@ -280,36 +269,31 @@ fun ArticleContent(
             }
         }
 
+        // Bottom bar: BACK, (conditional) RANDOM — NO FAST_FORWARD
         LightBottomBar(
-            items = listOf(
-                LightBarButton.LightIcon(
-                    icon = LightIcons.BACK,
-                    onClick = onBack,
-                    contentDescription = "Back",
-                ),
-                LightBarButton.LightIcon(
-                    icon = LightIcons.LOOP,
-                    onClick = onRandom,
-                    contentDescription = "Random article",
-                ),
-                LightBarButton.LightIcon(
-                    icon = LightIcons.FAST_FORWARD,
-                    onClick = {
-                        val next = (listState.firstVisibleItemIndex + 1)
-                            .coerceAtMost(totalItems - 1)
-                        scope.launch { listState.animateScrollToItem(next) }
-                    },
-                    contentDescription = "Skip to next section",
-                ),
-            ),
+            items = buildList {
+                add(
+                    LightBarButton.LightIcon(
+                        icon = LightIcons.BACK,
+                        onClick = onBack,
+                        contentDescription = "Back",
+                    ),
+                )
+                if (showRandomArticle) {
+                    add(
+                        LightBarButton.LightIcon(
+                            icon = LightIcons.LOOP,
+                            onClick = onRandom,
+                            contentDescription = "Random article",
+                        ),
+                    )
+                }
+            },
         )
     }
 }
 
-/**
- * Resolves the word surrounding a character offset in [text].
- * Used so a long-press targets the specific word, not the whole line.
- */
+/** Resolves the word surrounding a character offset in [text]. Used so a long-press targets the specific word, not the whole line. */
 private fun wordAtOffset(text: String, offset: Int): String {
     if (text.isEmpty()) return text
     val o = offset.coerceIn(0, text.length - 1)

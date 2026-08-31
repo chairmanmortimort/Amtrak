@@ -1,22 +1,23 @@
 package com.thelightphone.wikipedia
-import android.util.Log
 
+import android.util.Log
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.background
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.thelightphone.sdk.ui.defaultKeyboardOptions
-import kotlinx.coroutines.flow.MutableStateFlow
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import kotlinx.coroutines.flow.MutableStateFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -26,6 +27,7 @@ import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightBottomBar
 import com.thelightphone.sdk.ui.LightFullscreenModal
+import com.thelightphone.sdk.ui.LightIcon
 import com.thelightphone.sdk.ui.LightIcons
 import com.thelightphone.sdk.ui.LightText
 import com.thelightphone.sdk.ui.LightTextVariant
@@ -37,6 +39,8 @@ import com.thelightphone.sdk.ui.LightTopBar
 import com.thelightphone.sdk.ui.LightTopBarCenter
 import com.thelightphone.sdk.ui.gridUnitsAsDp
 import com.thelightphone.sdk.ui.lightClickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
 
 @InitialScreen
 class WikipediaHomeScreen(sealedActivity: SealedLightActivity) :
@@ -52,6 +56,7 @@ class WikipediaHomeScreen(sealedActivity: SealedLightActivity) :
     override fun Content() {
         val themeColors by LightThemeController.colors.collectAsState()
         val state by viewModel.uiState.collectAsState()
+        val settings by viewModel.settings.collectAsState()
 
         LightTheme(colors = themeColors) {
             Box(
@@ -64,9 +69,11 @@ class WikipediaHomeScreen(sealedActivity: SealedLightActivity) :
                         HomeContent(
                             onSearchClick = viewModel::openSearch,
                             onRandomClick = viewModel::openRandom,
-                            onSettingsClick = viewModel::openAbout,
+                            onSettingsClick = viewModel::openSettings,
                             recentArticles = state.recentArticles,
+                            showArticleOfDay = settings?.showArticleOfDay ?: true,
                             onOpenRecent = viewModel::openArticle,
+                            onArticleOfDay = viewModel::openArticleOfDay,
                         )
                     }
 
@@ -125,12 +132,25 @@ class WikipediaHomeScreen(sealedActivity: SealedLightActivity) :
                             onOpenSettings = viewModel::openAbout,
                             onOpenLink = viewModel::openLink,
                             onRandom = viewModel::openRandom,
+                            showRandomArticle = settings?.showRandomArticle ?: true,
                             onLongPressWord = viewModel::defineTerm,
                         )
                     }
 
                     is WikipediaScreenMode.About -> {
                         AboutContent(onBack = viewModel::closeAbout)
+                    }
+
+                    is WikipediaScreenMode.Settings -> {
+                        SettingsContent(
+                            showRecent = mode.showRecentArticles,
+                            showArticleOfDay = mode.showArticleOfDay,
+                            showRandom = mode.showRandomArticle,
+                            onToggleRecent = viewModel::toggleShowRecentArticles,
+                            onToggleArticleOfDay = viewModel::toggleShowArticleOfDay,
+                            onToggleRandom = viewModel::toggleShowRandomArticle,
+                            onBack = viewModel::closeSettings,
+                        )
                     }
                 }
 
@@ -143,10 +163,11 @@ class WikipediaHomeScreen(sealedActivity: SealedLightActivity) :
             }
         }
     }
+
 }
 
 /**
- * Home screen — presents Search, Random, and recently viewed articles.
+ * Home screen — presents Search, Random, Article of the Day, and recently viewed articles.
  */
 @Composable
 private fun HomeContent(
@@ -154,7 +175,9 @@ private fun HomeContent(
     onRandomClick: () -> Unit,
     onSettingsClick: () -> Unit,
     recentArticles: List<String> = emptyList(),
+    showArticleOfDay: Boolean = true,
     onOpenRecent: (String) -> Unit = {},
+    onArticleOfDay: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -165,7 +188,7 @@ private fun HomeContent(
             rightButton = LightBarButton.LightIcon(
                 icon = LightIcons.SETTINGS,
                 onClick = onSettingsClick,
-                contentDescription = "About",
+                contentDescription = "Settings",
             ),
             modifier = Modifier.padding(bottom = 0.25f.gridUnitsAsDp()),
         )
@@ -209,20 +232,27 @@ private fun HomeContent(
                 icon = LightIcons.LOOP,
                 onClick = onRandomClick,
             )
+            if (showArticleOfDay) {
+                HomeMenuItem(
+                    text = "Article of the Day",
+                    icon = LightIcons.CIRCLE,
+                    onClick = onArticleOfDay,
+                )
+            }
             if (recentArticles.isNotEmpty()) {
                 LightText(
                     text = "Recent",
-                    variant = LightTextVariant.Subheading,
+                    variant = LightTextVariant.Detail, // smaller, per user feedback
                     modifier = Modifier.padding(top = 2f.gridUnitsAsDp(), bottom = 0.5f.gridUnitsAsDp()),
                 )
                 recentArticles.forEach { title ->
                     LightText(
                         text = title,
-                        variant = LightTextVariant.Subheading,
+                        variant = LightTextVariant.Detail, // smaller
                         modifier = Modifier
                             .fillMaxWidth()
                             .lightClickable(onClick = { onOpenRecent(title) })
-                            .padding(vertical = 1.5f.gridUnitsAsDp()),
+                            .padding(vertical = 1f.gridUnitsAsDp()), // tighter
                     )
                 }
             }
@@ -250,9 +280,113 @@ private fun HomeMenuItem(
 }
 
 /**
- * Search input screen using the SDK's LightTextInputEditor — integrates with LP3
- * hardware keyboard and supports D-pad navigation properly.
- * Uses editorKey to force TextFieldState reset on re-entry (same pattern as Amtrak SearchScreen).
+ * Settings screen — toggles for Recent Articles, Article of the Day, and Random Article.
+ * Uses the same pattern as Weather app's SettingsContent.
+ */
+@Composable
+private fun SettingsContent(
+    showRecent: Boolean,
+    showArticleOfDay: Boolean,
+    showRandom: Boolean,
+    onToggleRecent: () -> Unit,
+    onToggleArticleOfDay: () -> Unit,
+    onToggleRandom: () -> Unit,
+    onBack: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        LightTopBar(
+            leftButton = LightBarButton.LightIcon(
+                icon = LightIcons.BACK,
+                onClick = onBack,
+                contentDescription = "Back",
+            ),
+            center = LightTopBarCenter.Text("Settings"),
+            modifier = Modifier.padding(bottom = 1f.gridUnitsAsDp()),
+        )
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = 1f.gridUnitsAsDp()),
+        ) {
+            ToggleSettingRow(
+                label = "Recent Articles",
+                enabled = showRecent,
+                onClick = onToggleRecent,
+            )
+            ToggleSettingRow(
+                label = "Article of the Day",
+                enabled = showArticleOfDay,
+                onClick = onToggleArticleOfDay,
+            )
+            ToggleSettingRow(
+                label = "Random Article",
+                enabled = showRandom,
+                onClick = onToggleRandom,
+            )
+        }
+
+        LightBottomBar(
+            items = listOf(
+                LightBarButton.LightIcon(
+                    icon = LightIcons.BACK,
+                    onClick = onBack,
+                    contentDescription = "Back",
+                ),
+            ),
+        )
+    }
+}
+
+@Composable
+private fun ToggleSettingRow(
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .lightClickable(onClick = onClick)
+            .padding(vertical = 1f.gridUnitsAsDp()),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+        ) {
+            LightText(
+                text = label,
+                variant = LightTextVariant.Copy,
+            )
+            LightIcon(
+                icon = if (enabled) LightIcons.TOGGLE_STATE_ON else LightIcons.TOGGLE_STATE_OFF,
+                size = 6f,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AttributionFooter(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(4f.gridUnitsAsDp())
+            .lightClickable(onClick = onClick)
+            .padding(horizontal = 1f.gridUnitsAsDp()),
+        contentAlignment = Alignment.Center,
+    ) {
+        LightText(
+            text = "Content licensed under CC BY-SA 4.0.",
+            variant = LightTextVariant.Fine,
+            lighten = true,
+        )
+    }
+}
+
+/**
+ * Search input screen using the SDK's LightTextInputEditor.
  */
 @Composable
 fun SearchInputContent(
