@@ -1,0 +1,9 @@
+[tool]
+id          = "com.thelightphone.amtrak"
+label       = "Amtrak"
+versionCode = 2
+versionName = "1.1.0"
+permissions = ["android.permission.INTERNET"]
+orientation = "portrait"
+# Target the real Light Phone III (LightOS).
+serverPackage = "com.lightos"
