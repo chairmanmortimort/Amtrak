@@ -25,6 +25,7 @@ import com.thelightphone.sdk.ui.LightThemeController
 import com.thelightphone.sdk.ui.LightThemeTokens
 import com.thelightphone.sdk.ui.LightTopBar
 import com.thelightphone.sdk.ui.LightTopBarCenter
+import com.thelightphone.sdk.ui.lightClickable
 import com.thelightphone.sdk.ui.gridUnitsAsDp
 
 class StationDetailScreen(
@@ -55,6 +56,11 @@ class StationDetailScreen(
                         contentDescription = "Back",
                     ),
                     center = LightTopBarCenter.Text("Station"),
+                    rightButton = LightBarButton.LightIcon(
+                        icon = LightIcons.SETTINGS,
+                        onClick = { navigateTo(screenFactory = { activity -> AboutScreen(activity) }) },
+                        contentDescription = "About",
+                    ),
                     modifier = Modifier.padding(bottom = 0.25f.gridUnitsAsDp()),
                 )
                 Box(
@@ -118,6 +124,10 @@ class StationDetailScreen(
                                         Column(
                                             modifier = Modifier
                                                 .fillMaxWidth()
+                                                .lightClickable {
+                                                    NavigationArgs.trainId = train.trainId
+                                                    navigateTo(::TrainDetailScreen)
+                                                }
                                                 .padding(vertical = 0.5f.gridUnitsAsDp()),
                                         ) {
                                             LightText(
@@ -125,8 +135,16 @@ class StationDetailScreen(
                                                 variant = LightTextVariant.Copy,
                                             )
                                             val arr = viewModel.formatArrival(train)
+                                            val delay = train.delay
                                             LightText(
-                                                text = if (arr.isNotEmpty()) "Arriving $arr" else "Scheduled arrival ${viewModel.formatArrival(train)}",
+                                                text = buildString {
+                                                    if (arr.isNotEmpty()) append(arr)
+                                                    if (delay.isNotEmpty()) {
+                                                        append(" · ")
+                                                        append(delay)
+                                                    }
+                                                    if (isEmpty()) append("—")
+                                                },
                                                 variant = LightTextVariant.Detail,
                                                 lighten = true,
                                             )

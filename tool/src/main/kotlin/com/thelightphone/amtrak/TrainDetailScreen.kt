@@ -3,15 +3,19 @@ package com.thelightphone.amtrak
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import com.thelightphone.sdk.LightScreen
@@ -57,6 +61,11 @@ class TrainDetailScreen(
                         contentDescription = "Back",
                     ),
                     center = LightTopBarCenter.Text("Train"),
+                    rightButton = LightBarButton.LightIcon(
+                        icon = LightIcons.SETTINGS,
+                        onClick = { navigateTo(screenFactory = { activity -> AboutScreen(activity) }) },
+                        contentDescription = "About",
+                    ),
                     modifier = Modifier.padding(bottom = 0.25f.gridUnitsAsDp()),
                 )
                 Box(
@@ -114,48 +123,99 @@ class TrainDetailScreen(
                                 )
                                 if (stops.isNotEmpty()) {
                                     LightText(
-                                        text = "STOPS",
+                                        text = "ROUTE",
                                         variant = LightTextVariant.Detail,
                                         lighten = true,
                                         modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
                                     )
-                                    stops.forEach { stop ->
+                                    Box(modifier = Modifier.fillMaxWidth()) {
+                                        // Route progress: stop name/times on the LEFT,
+                                        // connecting line + square markers on the RIGHT.
                                         Column(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .lightClickable {
-                                                    val code = stop.code
-                                                    if (code.isNotBlank()) {
-                                                        NavigationArgs.stationCode = code
-                                                        navigateTo(::StationDetailScreen)
+                                                .align(Alignment.CenterStart),
+                                        ) {
+                                            stops.forEach { stop ->
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .lightClickable {
+                                                            val code = stop.code
+                                                            if (code.isNotBlank()) {
+                                                                NavigationArgs.stationCode = code
+                                                                navigateTo(::StationDetailScreen)
+                                                            }
+                                                        }
+                                                        .padding(vertical = 0.5f.gridUnitsAsDp()),
+                                                ) {
+                                                    Column(
+                                                        modifier = Modifier
+                                                            .weight(1f)
+                                                            .padding(end = 1f.gridUnitsAsDp()),
+                                                ) {
+                                                        LightText(
+                                                            text = stop.name,
+                                                            variant = LightTextVariant.Copy,
+                                                        )
+                                                        val time = stop.estimatedArrival.ifEmpty { stop.scheduledArrival }
+                                                        val sub = buildString {
+                                                            if (time.isNotEmpty()) append(time)
+                                                            if (stop.delay.isNotEmpty()) {
+                                                                if (isNotEmpty()) append(" · ")
+                                                                append(stop.delay)
+                                                            }
+                                                            if (stop.status.isNotEmpty()) {
+                                                                if (isNotEmpty()) append(" · ")
+                                                                append(stop.status)
+                                                            }
+                                                            if (stop.comment.isNotEmpty()) {
+                                                                if (isNotEmpty()) append(" · ")
+                                                                append(stop.comment)
+                                                            }
+                                                        }
+                                                        if (sub.isNotEmpty()) {
+                                                            LightText(
+                                                                text = "   $sub",
+                                                                variant = LightTextVariant.Detail,
+                                                                lighten = true,
+                                                                modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp()),
+                                                            )
+                                                        }
+                                                    }
+                                                    // Marker, on the right edge of the row.
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .width(1.5f.gridUnitsAsDp())
+                                                            .align(Alignment.CenterVertically),
+                                                    ) {
+                                                        val marker = when (stop.progress) {
+                                                            StopProgress.Past -> "◼"
+                                                            StopProgress.Current -> "◼"
+                                                            StopProgress.Future -> "□"
+                                                        }
+                                                        val markerColor = if (stop.progress == StopProgress.Current)
+                                                            LightThemeTokens.colors.content
+                                                        else
+                                                            LightThemeTokens.colors.contentSecondary
+                                                        LightText(
+                                                            text = marker,
+                                                            variant = LightTextVariant.Copy,
+                                                            monospace = true,
+                                                            color = markerColor,
+                                                        )
                                                     }
                                                 }
-                                                .padding(vertical = 0.5f.gridUnitsAsDp()),
-                                        ) {
-                                            LightText(
-                                                text = stop.name,
-                                                variant = LightTextVariant.Copy,
-                                            )
-                                            val time = stop.estimatedArrival.ifEmpty { stop.scheduledArrival }
-                                            val sub = buildString {
-                                                if (time.isNotEmpty()) append(time)
-                                                if (stop.status.isNotEmpty()) {
-                                                    if (isNotEmpty()) append(" · ")
-                                                    append(stop.status)
-                                                }
-                                                if (stop.comment.isNotEmpty()) {
-                                                    if (isNotEmpty()) append(" · ")
-                                                    append(stop.comment)
-                                                }
-                                            }
-                                            if (sub.isNotEmpty()) {
-                                                LightText(
-                                                    text = sub,
-                                                    variant = LightTextVariant.Detail,
-                                                    lighten = true,
-                                                )
                                             }
                                         }
+                                        // Vertical line connecting every stop's marker.
+                                        Box(
+                                            modifier = Modifier
+                                                .width(1.5f.gridUnitsAsDp())
+                                                .fillMaxHeight()
+                                                .background(LightThemeTokens.colors.contentSecondary)
+                                                .align(Alignment.CenterEnd),
+                                        )
                                     }
                                 }
                             }

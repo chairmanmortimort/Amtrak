@@ -53,6 +53,11 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                             else -> "Trains"
                         },
                     ),
+                    rightButton = LightBarButton.LightIcon(
+                        icon = LightIcons.SETTINGS,
+                        onClick = { navigateTo(screenFactory = { activity -> AboutScreen(activity) }) },
+                        contentDescription = "About",
+                    ),
                     modifier = Modifier.padding(bottom = 0.25f.gridUnitsAsDp()),
                 )
                 Box(

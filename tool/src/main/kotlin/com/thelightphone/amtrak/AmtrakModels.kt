@@ -32,6 +32,10 @@ data class TrainData(
     val trainState: String = "",
     val statusMsg: String = "",
     val serviceDisruption: Boolean = false,
+    // amtraker.com live API returns trainTimely as an (often empty) STRING,
+    // e.g. "trainTimely":"" — never a JSON boolean. Declared as String so the
+    // trains map decodes instead of throwing and dropping every train.
+    val trainTimely: String = "",
     val eventCode: String = "",
     val origCode: String = "",
     val destCode: String = "",
@@ -60,7 +64,15 @@ data class TrainStation(
     val depCmnt: String = "",
     val status: String = "",
     val postCmnt: String = "",
-)
+) {
+    /** Whole-minute arrival delay vs scheduled (negative = early). Null when no actual arrival yet. */
+    val arrivalDelayMinutes: Int? get() =
+        arr?.let { a -> schArr?.let { s -> ((a.epochSeconds - s.epochSeconds) / 60).toInt() } }
+
+    /** Whole-minute departure delay vs scheduled (negative = early). Null when no actual departure yet. */
+    val departureDelayMinutes: Int? get() =
+        dep?.let { d -> schDep?.let { s -> ((d.epochSeconds - s.epochSeconds) / 60).toInt() } }
+}
 
 // === Stations ===
 
@@ -131,19 +143,41 @@ data class StationDisplay(
     val hasTrains: Boolean get() = nextTrains.isNotEmpty()
 }
 
+/** Position of a train relative to a stop, for the route-progress view. */
+enum class StopProgress {
+    Past,   // the train has already visited this stop.
+    Current, // the train is here now.
+    Future,  // the train has not yet arrived.
+}
+
 data class StationTrain(
     val trainNum: Int,
     val routeName: String,
-    val scheduledArrival: Instant?,
-    val estimatedArrival: Instant?,
-    val actualArrival: Instant?,
-    val scheduledDeparture: Instant?,
-    val estimatedDeparture: Instant?,
-    val actualDeparture: Instant?,
+    val trainId: String,
+    val scheduledArrival: Instant? = null,
+    val estimatedArrival: Instant? = null,
+    val actualArrival: Instant? = null,
+    val scheduledDeparture: Instant? = null,
+    val estimatedDeparture: Instant? = null,
+    val actualDeparture: Instant? = null,
+    val delay: String = "",
     val status: String,
 ) {
     val trainNumber: String get() = trainNum.toString()
     val displayRoute: String get() = routeName.ifEmpty { "Train $trainNum" }
-    val arrivalTime: Instant? get() = estimatedArrival ?: scheduledArrival
-    val departureTime: Instant? get() = estimatedDeparture ?: scheduledDeparture
+    val arrivalTime: Instant? get() = actualArrival ?: scheduledArrival
+    val departureTime: Instant? get() = actualDeparture ?: scheduledDeparture
+
+    /** Whole-minute arrival delay at this stop vs scheduled (negative = early). Null when not yet arrived. */
+    val arrivalDelayMinutes: Int? get() =
+        actualArrival?.let { a -> scheduledArrival?.let { s -> ((a.epochSeconds - s.epochSeconds) / 60).toInt() } }
+}
+
+internal fun formatDelay(minutes: Int?): String {
+    if (minutes == null) return ""
+    return when {
+        minutes > 1 -> "$minutes min late"
+        minutes < -1 -> "${-minutes} min early"
+        else -> "On time"
+    }
 }

@@ -122,14 +122,25 @@ class AmtrakViewModel : LightViewModel<Unit>() {
                 onSuccess = { trains ->
                     val train = trains.firstOrNull()
                     if (train != null) {
-                        val stops = train.stations.map { st ->
+                        // eventCode is the train's current station. Stops before it are
+                        // ahead (the train has already been), the stop matching eventCode
+                        // is where the train is now, and stops after it are still future.
+                        val currentIndex = train.stations.indexOfFirst { it.code == train.eventCode }
+                        val stops = train.stations.mapIndexed { index, st ->
+                            val progress = when {
+                                currentIndex >= 0 && index < currentIndex -> StopProgress.Past
+                                currentIndex >= 0 && index == currentIndex -> StopProgress.Current
+                                else -> StopProgress.Future
+                            }
                             StopDisplay(
                                 name = st.name.ifEmpty { stationKeys[st.code] ?: st.code },
                                 code = st.code,
                                 scheduledArrival = formatInstant(st.schArr),
                                 estimatedArrival = formatInstant(st.arr),
+                                delay = formatDelay(st.arrivalDelayMinutes),
                                 status = st.status,
                                 comment = st.postCmnt.ifEmpty { st.arrCmnt.ifEmpty { st.depCmnt } },
+                                progress = progress,
                             )
                         }
                         _trainDetailState.value = TrainDetailState.Train(train.toDisplay(trainId), stops)
@@ -159,7 +170,7 @@ class AmtrakViewModel : LightViewModel<Unit>() {
                         .mapNotNull { id ->
                             api.fetchTrain(id).getOrNull()
                                 ?.firstOrNull()
-                                ?.toStationTrain(id)
+                                ?.toStationTrain(id, stationCode)
                         }
                     val stationDisplay = StationDisplay(
                         code = stationCode,
@@ -184,9 +195,9 @@ class AmtrakViewModel : LightViewModel<Unit>() {
         val destination = stationKeys[destCode] ?: destCode
         val currentStop = stationKeys[eventCode] ?: eventCode
         val currentStation = stations.firstOrNull { it.code == eventCode }
-        val delay = currentStation?.arrCmnt?.takeIf { it.isNotEmpty() }
-            ?: currentStation?.depCmnt?.takeIf { it.isNotEmpty() }
-            ?: "On time"
+        val delay = formatDelay(
+            currentStation?.arrivalDelayMinutes ?: currentStation?.departureDelayMinutes,
+        ) ?: "On time"
         return TrainDisplay(
             trainId = trainId,
             trainNum = trainNum.toIntOrNull() ?: trainId.toIntOrNull() ?: 0,
@@ -204,19 +215,21 @@ class AmtrakViewModel : LightViewModel<Unit>() {
         )
     }
 
-    private fun TrainData.toStationTrain(trainId: String): StationTrain {
+    private fun TrainData.toStationTrain(trainId: String, stationCode: String): StationTrain {
         val num = trainId.split("-").firstOrNull()?.toIntOrNull() ?: trainNum.toIntOrNull() ?: 0
-        // Prefer actual times, else estimated, else scheduled.
+        // Resolve the stop AT the viewed station (not the train origin) so times and
+        // delays apply to the station the user is viewing. Fall back to the first stop.
+        val stop = stations.firstOrNull { it.code == stationCode } ?: stations.firstOrNull()
         return StationTrain(
             trainNum = num,
             routeName = routeName,
-            scheduledArrival = stations.firstOrNull()?.schArr,
-            estimatedArrival = stations.firstOrNull()?.arr,
-            actualArrival = stations.firstOrNull()?.arr,
-            scheduledDeparture = stations.firstOrNull()?.schDep,
-            estimatedDeparture = stations.firstOrNull()?.dep,
-            actualDeparture = stations.firstOrNull()?.dep,
-            status = stations.firstOrNull()?.status ?: "",
+            trainId = trainId,
+            scheduledArrival = stop?.schArr,
+            actualArrival = stop?.arr,
+            scheduledDeparture = stop?.schDep,
+            actualDeparture = stop?.dep,
+            delay = formatDelay(stop?.arrivalDelayMinutes),
+            status = stop?.status ?: "",
         )
     }
 
@@ -252,8 +265,10 @@ class AmtrakViewModel : LightViewModel<Unit>() {
         val code: String,
         val scheduledArrival: String = "",
         val estimatedArrival: String = "",
+        val delay: String = "",
         val status: String = "",
         val comment: String = "",
+        val progress: StopProgress = StopProgress.Future,
     )
 
     sealed class StationDetailState {
