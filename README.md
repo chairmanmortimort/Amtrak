@@ -6,7 +6,7 @@ A calm, text-first transit app for the Light Phone III built with the Light SDK.
 
 ![Home — Trains](docs/screenshots/home.png)
 [![Train detail](docs/screenshots/train-detail.png)](docs/screenshots/train-detail.png)
-![About / attribution](docs/screenshots/about.png)
+![Stations](docs/screenshots/stations.png)
 
 ## What this app does
 
