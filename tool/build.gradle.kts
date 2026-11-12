@@ -15,6 +15,7 @@ android {
         targetSdk = rootProject.ext["targetSdk"] as Int
 
         manifestPlaceholders["sdkVersion"] = property("sdkVersion") as String
+        multiDexEnabled = true
     }
 
     signingConfigs {
@@ -33,7 +34,7 @@ android {
             signingConfig = signingConfigs.getByName("lightsdkDev")
         }
         release {
-            isMinifyEnabled = true
+            isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
             signingConfig = signingConfigs.getByName("lightsdkDev")
         }
@@ -65,4 +66,5 @@ dependencies {
     implementation(libs.ktor.serialization.json)
     implementation(libs.kotlinx.datetime)
     testImplementation(libs.kotlin.test)
+    implementation("androidx.multidex:multidex:2.0.1")
 }
