@@ -143,7 +143,7 @@ data class StationTrain(
     val actualArrival: Instant?,
     val scheduledDeparture: Instant?,
     val estimatedDeparture: Instant?,
-    val actualDeparture: Instant?,
+    val actualDeparture: Instant? = null,
     val status: String,
 ) {
     val trainNumber: String get() = trainNum.toString()
